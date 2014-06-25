@@ -430,7 +430,9 @@ int AudioLoader::decodePacket() {
 
 
 inline Real scale(int16_t value) {
-    return value / (Real)32767;
+  static const Real kInv32767 = 1.0 / 32767.0;
+  return value * kInv32767;
+  //return value / (Real)32767;
 }
 
 void AudioLoader::copyFFmpegOutput() {
