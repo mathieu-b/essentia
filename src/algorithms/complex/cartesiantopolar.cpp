@@ -51,10 +51,10 @@ void CartesianToPolar::compute() {
   phase.resize(c.size());
 
   for (std::vector<Real>::size_type i=0; i<magnitude.size(); i++) {
-    magnitude[i] = sqrt(c[i].real()*c[i].real() + c[i].imag()*c[i].imag());
+    magnitude[i] = sqrtf(c[i].real()*c[i].real() + c[i].imag()*c[i].imag());
   }
 
   for (std::vector<Real>::size_type i=0; i<phase.size(); i++) {
-    phase[i] = atan2(c[i].imag(), c[i].real());
+    phase[i] = atan2f(c[i].imag(), c[i].real());
   }
 }
