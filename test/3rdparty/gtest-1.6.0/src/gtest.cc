@@ -102,6 +102,13 @@
 
 #else
 
+#ifdef __MACH__
+// Precise timing on OSX / iOS
+// . see http://cnx.org/content/m43804/latest/?collection=col11438/latest
+// . see http://stackoverflow.com/a/4753909
+#include <mach/mach_time.h>
+#endif
+
 // Assume other platforms have gettimeofday().
 // TODO(kenton@google.com): Use autoconf to detect availability of
 //   gettimeofday().
@@ -804,6 +811,19 @@ TimeInMillis GetTimeInMillis() {
 # endif  // _MSC_VER
 
   return static_cast<TimeInMillis>(now.time) * 1000 + now.millitm;
+#elif defined(__MACH__)
+  {
+    const int64_t kOneMillion = 1000 * 1000;
+    static mach_timebase_info_data_t s_timebase_info;
+    
+    if (s_timebase_info.denom == 0) {
+      (void) mach_timebase_info(&s_timebase_info);
+    }
+    
+    // mach_absolute_time() returns billionth of seconds,
+    // so divide by one million to get milliseconds
+    return (int)((mach_absolute_time() * s_timebase_info.numer) / (kOneMillion * s_timebase_info.denom));
+  }
 #elif GTEST_HAS_GETTIMEOFDAY_
   struct timeval now;
   gettimeofday(&now, NULL);
