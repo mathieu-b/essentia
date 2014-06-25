@@ -23,7 +23,17 @@
 
 static const bool FULL_DEBUG = false;
 
-int main(int argc, char **argv) {
+// When an app (e.g. iOS) already requires another main() entry point, change the main() function name
+#ifndef GTEST_HAS_FREE_STANDING_MAIN
+  #define GTEST_HAS_FREE_STANDING_MAIN 0
+#endif
+
+#if GTEST_HAS_FREE_STANDING_MAIN
+int essentia_test_main(int argc, char **argv)
+#else
+int main(int argc, char **argv)
+#endif
+{
   ::essentia::init();
 
   if (FULL_DEBUG) {
