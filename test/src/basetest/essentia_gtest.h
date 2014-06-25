@@ -28,6 +28,21 @@
 #include "streamingalgorithmcomposite.h"
 #include "poolstorage.h"
 
+namespace essentia {
+    class TestPaths {
+    public:
+        static void setFileOutputFilePath(std::string filepath);
+        static const std::string getFileOutputFilePath();
+        static void setRecordedAudioFilesBasePath(std::string filepath);
+        static const std::string getRecordedAudioFilesBasePath();
+        
+    private:
+        static std::string _file_output_file_path;
+        static std::string _recorded_audio_files_base_path;
+    };
+};
+
+
 #define DBG(x) E_DEBUG(EUnittest, x)
 
 #define EXPECT_VEC_EQ(x, y) {                                                         \

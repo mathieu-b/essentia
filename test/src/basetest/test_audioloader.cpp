@@ -28,11 +28,10 @@ using namespace essentia;
 using namespace essentia::streaming;
 using namespace essentia::scheduler;
 
-
 TEST(AudioLoader, SimpleLoad) {
     AlgorithmFactory& factory = AlgorithmFactory::instance();
     Algorithm* loader =  factory.create("AudioLoader",
-                                        "filename", "test/audio/recorded/cat_purrrr.wav");
+                                        "filename", TestPaths::getRecordedAudioFilesBasePath() + "cat_purrrr.wav");
     essentia::Pool p;
 
     loader->output("audio")           >>  PC(p, "audio");
@@ -49,7 +48,7 @@ TEST(AudioLoader, SimpleLoad) {
 TEST(AudioLoader, SampleFormatConversion) {
     AlgorithmFactory& factory = AlgorithmFactory::instance();
     Algorithm* loader24 =  factory.create("AudioLoader",
-                                          "filename", "test/audio/recorded/cat_purrrr24bit.wav");
+                                          "filename", TestPaths::getRecordedAudioFilesBasePath() + "cat_purrrr24bit.wav");
     essentia::Pool p;
 
     loader24->output("audio")           >>  PC(p, "audio24");
@@ -63,11 +62,11 @@ TEST(AudioLoader, SampleFormatConversion) {
     EXPECT_EQ(219343,  (int)p.value<vector<StereoSample> >("audio24").size());
 
     // FIXME: the following should work
-    //loader->configure("filename", "test/audio/recorded/britney32bit.wav");
+    //loader->configure("filename", TestPaths::getRecordedAudioFilesBasePath() + "britney32bit.wav");
     //p.clear();
 
     Algorithm* loader32 =  factory.create("AudioLoader",
-                                          "filename", "test/audio/recorded/cat_purrrr32bit.wav");
+                                          "filename", TestPaths::getRecordedAudioFilesBasePath() + "cat_purrrr32bit.wav");
 
     loader32->output("audio")           >>  PC(p, "audio32");
     loader32->output("sampleRate")      >>  PC(p, "samplerate32");

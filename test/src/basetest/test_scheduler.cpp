@@ -44,7 +44,7 @@ TEST(Scheduler, SourceProxyFork) {
   AlgorithmFactory& factory = AlgorithmFactory::instance();
 
   Algorithm* loader = factory.create("MonoLoader",
-                                     "filename", "test/audio/recorded/cat_purrrr.wav");
+                                     "filename", TestPaths::getRecordedAudioFilesBasePath() + "cat_purrrr.wav");
 
   Algorithm* bbands = factory.create("BarkExtractor");
 
