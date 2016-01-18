@@ -17,16 +17,26 @@
  * version 3 along with this program.  If not, see http://www.gnu.org/licenses/
  */
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <fileref.h>
+#include <tpropertymap.h>
 #include <tag.h>
+
+#include <algorithm>
+
 #include "metadatareader.h"
 #include "metadatautils.h"
 #include "essentiautil.h"
 
 
 using namespace std;
-using TagLib::FileRef;
-
+//using TagLib::FileRef;
+//using TagLib::PropertyMap;
+//using TagLib::String;
+//using TagLib::StringList;
 
 string fixInvalidUTF8(const string& str) {
   // a big fat hack to try to fix invalid utf-8 characters
@@ -150,8 +160,9 @@ bool isLatin1(const TagLib::String& str) {
 
 
 // Utility function to format tags so that they can be correctly parsed back
-string formatString(const TagLib::String& str) {
-  if (str.isNull()) return "";
+string formatString(const TagLib::StringList& strList) {
+  TagLib::String str = strList.toString(";");
+  if (str.isEmpty()) return "";
 
   string result = str.to8Bit(true);
 
@@ -182,14 +193,23 @@ const char* MetadataReader::description = DOC("This algorithm outputs the metada
 "  - ogg\n"
 "An exception is thrown if unsupported filetype is given or if the file does not exist.\n"
 "Please observe that the .wav format is not supported. Also note that this algorithm incorrectly calculates the number of channels for a file in mp3 format only for versions less than 1.5 of taglib in Linux and less or equal to 1.5 in Mac OS X\n"
+"If using this algorithm on Windows, you must ensure that the filename is encoded as UTF-8.\n"
 "This algorithm also contains some heuristic to try to deal with encoding errors in the tags and tries to do the appropriate conversion if a problem was found (mostly twice latin1->utf8 conversion).\n"
-);
+"\n"
+"MetadataReader reads all metadata tags found in audio and stores them in the pool tagPool. Standard metadata tags found in audio files include strings mentioned in [1,2]. Tag strings are case-sensitive and they are converted to lower-case when stored to the pool. It is possible to filter these tags by using 'filterMetadataTags' parameter. This parameter should specify a white-list of tag strings as they are found in the audio file (e.g., \"ARTIST\").\n"
+"\n"
+"References:\n"
+"  [1] https://taglib.github.io/api/classTagLib_1_1PropertyMap.html#details\n\n"
+"  [2] https://picard.musicbrainz.org/docs/mappings/");
 
 
 void MetadataReader::configure() {
   if (parameter("filename").isConfigured()) {
     _filename = parameter("filename").toString();
   }
+  _tagPoolName = parameter("tagPoolName").toString();
+  _filterMetadata = parameter("filterMetadata").toBool();
+  _filterMetadataTags = parameter("filterMetadataTags").toVectorString();
 }
 
 void MetadataReader::compute() {
@@ -197,7 +217,18 @@ void MetadataReader::compute() {
     throw EssentiaException("MetadataReader: 'filename' parameter has not been configured");
   }
 
-  FileRef f(_filename.c_str());
+#ifdef _WIN32
+  int len = MultiByteToWideChar(CP_UTF8, 0, _filename.c_str(), -1, NULL, 0);
+  wchar_t *buf = (wchar_t*)malloc(sizeof(wchar_t)*len);
+  memset(buf, 0, len);
+  MultiByteToWideChar(CP_UTF8, 0, _filename.c_str(), -1, buf, len);
+  TagLib::FileRef f(buf);
+  free(buf);
+#else
+  TagLib::FileRef f(_filename.c_str());
+#endif
+
+  Pool tagPool;
 
   if (f.isNull()) {
     // in case TagLib can't get metadata out of this file, try some basic PCM approach
@@ -207,6 +238,9 @@ void MetadataReader::compute() {
 
     try {
       pcmMetadata(_filename, pcmSampleRate, pcmChannels, pcmBitrate);
+      // works only for 16bit wavs/pcm; it should output incorrect value for 
+      // 24bit or 32bit float files, therefore, print a warning
+      E_WARNING("MetadataReader: TagLib could not get metadata for this file. The output bitrate is estimated treating the input as 16-bit PCM, and therefore may be incorrect.");
     }
     catch (EssentiaException& e) {
       if (parameter("failOnError").toBool())
@@ -218,10 +252,12 @@ void MetadataReader::compute() {
     _album.get()   = "";
     _comment.get() = "";
     _genre.get()   = "";
-    _track.get()   = 0;
-    _year.get()    = 0;
+    _track.get()   = "";
+    _date.get()    = "";
 
-    _length.get()     = 0;
+    _tagPool.get()  = tagPool;
+
+    _duration.get()   = 0;
     _bitrate.get()    = pcmBitrate;
     _sampleRate.get() = pcmSampleRate;
     _channels.get()   = pcmChannels;
@@ -229,15 +265,48 @@ void MetadataReader::compute() {
     return;
   }
 
-  _title.get()   = formatString(f.tag()->title());
-  _artist.get()  = formatString(f.tag()->artist());
-  _album.get()   = formatString(f.tag()->album());
-  _comment.get() = formatString(f.tag()->comment());
-  _genre.get()   = formatString(f.tag()->genre());
-  _track.get()   = f.tag()->track();
-  _year.get()    = f.tag()->year();
+  /*
+  TagLib::Tag *tag = f.tag();
 
-  _length.get()     = f.audioProperties()->length();
+  cout << "-- TAG (basic) --" << endl;
+  cout << "title   - \"" << tag->title()   << "\"" << endl;
+  cout << "artist  - \"" << tag->artist()  << "\"" << endl;
+  cout << "album   - \"" << tag->album()   << "\"" << endl;
+  cout << "year    - \"" << tag->year()    << "\"" << endl;
+  cout << "comment - \"" << tag->comment() << "\"" << endl;
+  cout << "track   - \"" << tag->track()   << "\"" << endl;
+  cout << "genre   - \"" << tag->genre()   << "\"" << endl;
+  */
+
+  TagLib::PropertyMap tags = f.file()->properties();
+
+  _title.get()   = formatString(tags["TITLE"]);
+  _artist.get()  = formatString(tags["ARTIST"]);
+  _album.get()   = formatString(tags["ALBUM"]);
+  _comment.get() = formatString(tags["COMMENT"]);
+  _genre.get()   = formatString(tags["GENRE"]);
+  _track.get()   = formatString(tags["TRACKNUMBER"]);
+  _date.get()    = formatString(tags["DATE"]);
+
+  // populate tag pool
+  for(TagLib::PropertyMap::ConstIterator i = tags.begin(); i != tags.end(); ++i) {
+    string key = i->first.to8Bit(true);
+    if (!_filterMetadata || std::find(_filterMetadataTags.begin(), _filterMetadataTags.end(), key) != _filterMetadataTags.end()) {
+        // remove '.' chars which are used in Pool descriptor names as a separator
+        // convert to lowercase
+        std::replace(key.begin(), key.end(), '.', '_');
+        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+        key = _tagPoolName + "." + key;
+
+        for(TagLib::StringList::ConstIterator str = i->second.begin(); str != i->second.end(); ++str) {
+          tagPool.add(key, str->to8Bit(true));
+        }
+    }
+  }
+
+  _tagPool.get()  = tagPool;
+
+  _duration.get()     = f.audioProperties()->length();
   _bitrate.get()    = f.audioProperties()->bitrate();
   _sampleRate.get() = f.audioProperties()->sampleRate();
   _channels.get()   = f.audioProperties()->channels();
@@ -268,7 +337,9 @@ void MetadataReader::configure() {
 AlgorithmStatus MetadataReader::process() {
   if (_filename == "" || !_newlyConfigured) return PASS;
 
-  FileRef f(_filename.c_str());
+  TagLib::FileRef f(_filename.c_str());
+
+  //Pool tagPool;
 
   if (f.isNull()) {
     // in case TagLib can't get metadata out of this file, try some basic PCM approach
@@ -289,23 +360,57 @@ AlgorithmStatus MetadataReader::process() {
     _album.push(ns);
     _comment.push(ns);
     _genre.push(ns);
-    _track.push(0);
-    _year.push(0);
-    _length.push(0);
+    _track.push(ns);
+    _date.push(ns);
+    //_tagPool.push(tagPool);
+    _duration.push(0);
     _bitrate.push(pcmBitrate);
     _sampleRate.push(pcmSampleRate);
     _channels.push(pcmChannels);
   }
   else {
-    _title.push(formatString(f.tag()->title()));
-    _artist.push(formatString(f.tag()->artist()));
-    _album.push(formatString(f.tag()->album()));
-    _comment.push(formatString(f.tag()->comment()));
-    _genre.push(formatString(f.tag()->genre()));
-    _track.push((int)f.tag()->track());
-    _year.push((int)f.tag()->year());
+    TagLib::PropertyMap tags = f.file()->properties();
 
-    _length.push((int)f.audioProperties()->length());
+    _title.push(formatString(tags["TITLE"]));
+    _artist.push(formatString(tags["ARTIST"]));
+    _album.push(formatString(tags["ALBUM"]));
+    _comment.push(formatString(tags["COMMENT"]));
+    _genre.push(formatString(tags["GENRE"]));
+    _track.push(formatString(tags["TRACKNUMBER"]));
+    _date.push(formatString(tags["DATE"]));
+
+    // populate tag pool
+    /*
+    for(PropertyMap::Iterator it = tags.begin(); it != tags.end(); ++it) {
+      for(StringList::Iterator str = it->second.begin(); str != it->second.end(); ++str) {
+        tagPool.add(it->first.to8Bit(true), str->to8Bit(true));
+      }
+    }
+    */
+
+
+    /*
+    cout << "musicbrainz_recordingid = MUSICBRAINZ_TRACKID = " << formatString(tags["MUSICBRAINZ_TRACKID"]) << endl;
+    cout << "musicbrainz_albumid = MUSICBRAINZ_ALBUMID = " << formatString(tags["MUSICBRAINZ_ALBUMID"]) << endl;
+    cout << "musicbrainz_artistid = MUSICBRAINZ_ARTISTID = " << formatString(tags["MUSICBRAINZ_ARTISTID"]) << endl;
+    cout << "musicbrainz_albumartistid = MUSICBRAINZ_ALBUMARTISTID = " << formatString(tags["MUSICBRAINZ_ALBUMARTISTID"]) << endl;
+    cout << "musicbrainz_releasegroupid = MUSICBRAINZ_RELEASEGROUPID = " << formatString(tags["MUSICBRAINZ_RELEASEGROUPID"]) << endl;
+    cout << "musicbrainz_workid = MUSICBRAINZ_WORKID = " << formatString(tags["MUSICBRAINZ_WORKID"]) << endl;
+    cout << "ACOUSTID_ID = " << formatString(tags["ACOUSTID_ID"]) << endl;
+    cout << "ACOUSTID_FINGERPRINT = " << formatString(tags["ACOUSTID_FINGERPRINT"]) << endl;
+    */
+
+    // TODO: missing in taglib?
+    // musicbrainz_trackid = MUSICBRAINZ_RELEASETRACKID
+    // musicbrainz_trmid = MUSICBRAINZ_TRMID
+    // musicbrainz_discid = MUSICBRAINZ_DISCID
+
+    //cout << "PropertyMap = " << formatString(tags.toString()) << endl;
+
+    //_tagPool.push(tagPool);
+
+
+    _duration.push((int)f.audioProperties()->length());
 
     int bitrate = f.audioProperties()->bitrate();
     // fix for taglib incorrectly returning the bitrate for wave files

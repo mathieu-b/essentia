@@ -20,11 +20,22 @@
 #ifndef ESSENTIA_CONFIG_H
 #define ESSENTIA_CONFIG_H
 
+#include "version.h"
+
 /**
  * Essentia version number.
  */
 #ifndef ESSENTIA_VERSION
-#define ESSENTIA_VERSION "2.0-dev"
+#define ESSENTIA_VERSION "Undefined"
+#endif
+
+
+/**
+ * Essentia github commit hash
+ */
+
+#ifndef ESSENTIA_GIT_SHA
+#define ESSENTIA_GIT_SHA "Undefined"
 #endif
 
 
@@ -100,11 +111,13 @@
 /**
  * OS type.
  */
-#ifdef _MSC_VER
+#if defined(_MSC_VER) || defined(_WIN32)
 #  define OS_WIN32
 #else
 #  if defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__)
 #    define OS_MAC
+#  elif defined(__FreeBSD__)
+#    define OS_FREEBSD
 #  else
 #    define OS_LINUX
 #  endif
@@ -131,6 +144,8 @@
 
   #include <float.h>
 
+  // don't need this for MINGW  // TODO test
+  /*
   namespace std {
     template <typename T>
     inline bool isnan(T x) {
@@ -140,7 +155,7 @@
     inline bool isinf(T x) {
       return _finite(x) == 0;
     }
-  }
+  } */
 #endif // OS_WIN32
 
 
